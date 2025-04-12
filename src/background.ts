@@ -3,38 +3,205 @@ interface TabState {
   isGrayscale: boolean;
 }
 
-// Initialize tab state when the extension is installed
-chrome.runtime.onInstalled.addListener(() => {
+interface GlobalSettings {
+  applyToAllTabs: boolean;
+}
+
+// Helper function to update icon based on grayscale state
+async function updateIcon(tabId: number | undefined, isGrayscale: boolean): Promise<void> {
+  if (tabId === undefined) return;
+  
+  await chrome.action.setIcon({
+    tabId: tabId,
+    path: isGrayscale ? {
+      16: 'icons/icon16_active.svg',
+      48: 'icons/icon48_active.svg',
+      128: 'icons/icon128_active.svg'
+    } : {
+      16: 'icons/icon16.svg',
+      48: 'icons/icon48.svg',
+      128: 'icons/icon128.svg'
+    }
+  });
+}
+
+// Function to apply grayscale to a specific tab
+async function applyGrayscaleToTab(tabId: number, isGrayscale: boolean): Promise<void> {
+  if (!tabId) return;
+
+  try {
+    // Save tab state
+    await chrome.storage.local.set({ [`tab_${tabId}`]: { isGrayscale } });
+    
+    // Update icon
+    await updateIcon(tabId, isGrayscale);
+    
+    // Send message to content script to apply the filter
+    try {
+      await chrome.tabs.sendMessage(tabId, { 
+        action: 'toggleGrayscale', 
+        isGrayscale: isGrayscale 
+      });
+    } catch (err) {
+      // This may happen if the content script isn't loaded yet
+      console.warn("Could not send message to content script:", err);
+      
+      // We can inject the content script programmatically if needed
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tabId },
+          func: (enabled: boolean) => {
+            document.documentElement.style.filter = enabled ? 'grayscale(100%)' : 'none';
+            document.documentElement.style.transition = 'filter 0.3s ease';
+          },
+          args: [isGrayscale]
+        });
+      } catch (scriptErr) {
+        // Some tabs don't allow script injection (e.g., chrome:// pages)
+        console.warn("Could not execute script:", scriptErr);
+      }
+    }
+  } catch (error) {
+    console.error('Error applying grayscale to tab:', error);
+  }
+}
+
+// Function to apply grayscale to all tabs
+async function applyGrayscaleToAllTabs(isGrayscale: boolean): Promise<void> {
+  try {
+    const tabs = await chrome.tabs.query({});
+    for (const tab of tabs) {
+      if (tab.id) {
+        await applyGrayscaleToTab(tab.id, isGrayscale);
+      }
+    }
+  } catch (error) {
+    console.error('Error applying grayscale to all tabs:', error);
+  }
+}
+
+// Initialize extension state when installed
+chrome.runtime.onInstalled.addListener(async () => {
   console.log('Monochrome extension installed.');
+  
+  // Initialize global settings
+  const result = await chrome.storage.local.get('globalSettings');
+  if (!result.globalSettings) {
+    await chrome.storage.local.set({
+      globalSettings: {
+        applyToAllTabs: false
+      }
+    });
+  }
 });
+
+// Function to toggle grayscale for the current tab
+async function toggleGrayscaleForTab(tabId: number): Promise<void> {
+  if (!tabId) return;
+
+  try {
+    // Get current tab state from storage
+    const result = await chrome.storage.local.get(`tab_${tabId}`);
+    const tabState: TabState = result[`tab_${tabId}`] || { isGrayscale: false };
+
+    // Toggle grayscale state
+    const newState = !tabState.isGrayscale;
+    
+    // Get global settings
+    const settingsResult = await chrome.storage.local.get('globalSettings');
+    const globalSettings: GlobalSettings = settingsResult.globalSettings || { applyToAllTabs: false };
+    
+    if (globalSettings.applyToAllTabs) {
+      // Apply to all tabs if the global setting is enabled
+      await applyGrayscaleToAllTabs(newState);
+    } else {
+      // Apply only to current tab
+      await applyGrayscaleToTab(tabId, newState);
+    }
+  } catch (error) {
+    console.error('Error toggling grayscale:', error);
+  }
+}
 
 // Listen for clicks on the extension icon
 chrome.action.onClicked.addListener(async (tab) => {
   if (!tab.id) return;
+  
+  // Open popup if we have one configured
+  // This is commented out because we want the icon click to still toggle grayscale directly
+  // chrome.action.openPopup();
+  
+  await toggleGrayscaleForTab(tab.id);
+});
 
+// Handle messages from content scripts and popup
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // Handle getTabId request from content scripts
+  if (message.action === 'getTabId' && sender.tab) {
+    sendResponse({ tabId: sender.tab.id });
+    return true;
+  }
+  
+  // Handle global setting update from popup
+  if (message.action === 'updateGlobalSetting') {
+    (async () => {
+      try {
+        // Check if we should apply the current state to all tabs
+        if (message.applyToAllTabs) {
+          // Get the active tab's state to apply to all tabs
+          const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+          if (tabs.length > 0 && tabs[0].id) {
+            const result = await chrome.storage.local.get(`tab_${tabs[0].id}`);
+            const activeTabState = result[`tab_${tabs[0].id}`] || { isGrayscale: false };
+            
+            // Apply the active tab's state to all tabs
+            await applyGrayscaleToAllTabs(activeTabState.isGrayscale);
+          }
+        }
+        sendResponse({ success: true });
+      } catch (error) {
+        console.error('Error updating global setting:', error);
+        sendResponse({ success: false, error });
+      }
+    })();
+    return true;
+  }
+  
+  // Handle toggle request from popup
+  if (message.action === 'toggleCurrentTab' && message.tabId) {
+    (async () => {
+      await toggleGrayscaleForTab(message.tabId);
+      sendResponse({ success: true });
+    })();
+    return true;
+  }
+  
+  return true; // Keep the message channel open for async responses
+});
+
+// Update icon when switching tabs to reflect the current state
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
   try {
-    // Get current tab state from storage
-    const result = await chrome.storage.local.get(`tab_${tab.id}`);
-    const tabState: TabState = result[`tab_${tab.id}`] || { isGrayscale: false };
-
-    // Toggle grayscale state
-    const newState: TabState = {
-      isGrayscale: !tabState.isGrayscale
-    };
-
-    // Save new state
-    await chrome.storage.local.set({ [`tab_${tab.id}`]: newState });
-
-    // Send message to content script to apply the filter
-    await chrome.tabs.sendMessage(tab.id, { 
-      action: 'toggleGrayscale', 
-      isGrayscale: newState.isGrayscale 
-    });
-
-    // Update icon to indicate current state (optional enhancement)
-    // This would require additional icons for active/inactive states
+    const result = await chrome.storage.local.get(`tab_${activeInfo.tabId}`);
+    const tabState = result[`tab_${activeInfo.tabId}`];
+    
+    await updateIcon(activeInfo.tabId, tabState?.isGrayscale || false);
   } catch (error) {
-    console.error('Error toggling grayscale:', error);
+    console.error('Error updating icon on tab switch:', error);
+  }
+});
+
+// Update icon when navigating to a new page
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'complete') {
+    try {
+      const result = await chrome.storage.local.get(`tab_${tabId}`);
+      const tabState = result[`tab_${tabId}`];
+      
+      await updateIcon(tabId, tabState?.isGrayscale || false);
+    } catch (error) {
+      console.error('Error updating icon on page load:', error);
+    }
   }
 });
 
