@@ -17,16 +17,16 @@
   ],
   "action": {
     "default_icon": {
-      "16": "png_icons/icon16.png",
-      "48": "png_icons/icon48.png",
-      "128": "png_icons/icon128.png"
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
     },
     "default_popup": "popup.html"
   },
   "icons": {
-    "16": "png_icons/icon16.png",
-    "48": "png_icons/icon48.png",
-    "128": "png_icons/icon128.png"
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
   },
   "web_accessible_resources": [
     {

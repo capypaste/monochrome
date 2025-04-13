@@ -7,22 +7,33 @@ interface GlobalSettings {
   applyToAllTabs: boolean;
 }
 
-// Helper function to update icon based on grayscale state
+// Helper function to update extension button based on grayscale state
 async function updateIcon(tabId: number | undefined, isGrayscale: boolean): Promise<void> {
   if (tabId === undefined) return;
   
-  await chrome.action.setIcon({
-    tabId: tabId,
-    path: isGrayscale ? {
-      16: 'png_icons/icon16_active.png',
-      48: 'png_icons/icon48_active.png',
-      128: 'png_icons/icon128_active.png'
-    } : {
-      16: 'png_icons/icon16.png',
-      48: 'png_icons/icon48.png',
-      128: 'png_icons/icon128.png'
-    }
-  });
+  // Use badge text instead of icon swapping
+  // This avoids the "Failed to fetch" error with icon loading
+  try {
+    // Set badge text (G for Grayscale enabled, empty for disabled)
+    await chrome.action.setBadgeText({
+      tabId: tabId,
+      text: isGrayscale ? 'ON' : ''
+    });
+    
+    // Set badge color
+    await chrome.action.setBadgeBackgroundColor({
+      tabId: tabId,
+      color: isGrayscale ? '#4CAF50' : '#CCCCCC'
+    });
+    
+    // Update title for accessibility
+    await chrome.action.setTitle({
+      tabId: tabId,
+      title: isGrayscale ? 'Monochrome: Grayscale Enabled (click to disable)' : 'Monochrome: Click to enable grayscale'
+    });
+  } catch (error) {
+    console.error('Error updating badge:', error);
+  }
 }
 
 // Function to apply grayscale to a specific tab
