@@ -1,0 +1,20 @@
+/* 
+ * Grayscale style for Monochrome extension
+ * This CSS file is injected at document_start to prevent flash of unstyled content
+ * The CSS will only be applied when the monochrome-enabled class is present
+ */
+html.monochrome-enabled {
+  filter: grayscale(100%) !important;
+  -webkit-filter: grayscale(100%) !important;
+  -moz-filter: grayscale(100%) !important;
+  transition: filter 0.3s ease !important;
+  -webkit-transition: -webkit-filter 0.3s ease !important;
+  -moz-transition: -moz-filter 0.3s ease !important;
+}
+
+/* Apply to all frames */
+html.monochrome-enabled iframe {
+  filter: grayscale(100%) !important;
+  -webkit-filter: grayscale(100%) !important;
+  -moz-filter: grayscale(100%) !important;
+}
