@@ -17,17 +17,23 @@
   ],
   "action": {
     "default_icon": {
-      "16": "icons/icon16.svg",
-      "48": "icons/icon48.svg",
-      "128": "icons/icon128.svg"
+      "16": "png_icons/icon16.png",
+      "48": "png_icons/icon48.png",
+      "128": "png_icons/icon128.png"
     },
     "default_popup": "popup.html"
   },
   "icons": {
-    "16": "icons/icon16.svg",
-    "48": "icons/icon48.svg",
-    "128": "icons/icon128.svg"
+    "16": "png_icons/icon16.png",
+    "48": "png_icons/icon48.png",
+    "128": "png_icons/icon128.png"
   },
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/*", "png_icons/*"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "commands": {
     "_execute_action": {
       "suggested_key": {

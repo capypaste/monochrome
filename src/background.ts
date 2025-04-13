@@ -14,13 +14,13 @@ async function updateIcon(tabId: number | undefined, isGrayscale: boolean): Prom
   await chrome.action.setIcon({
     tabId: tabId,
     path: isGrayscale ? {
-      16: 'icons/icon16_active.svg',
-      48: 'icons/icon48_active.svg',
-      128: 'icons/icon128_active.svg'
+      16: 'png_icons/icon16_active.png',
+      48: 'png_icons/icon48_active.png',
+      128: 'png_icons/icon128_active.png'
     } : {
-      16: 'icons/icon16.svg',
-      48: 'icons/icon48.svg',
-      128: 'icons/icon128.svg'
+      16: 'png_icons/icon16.png',
+      48: 'png_icons/icon48.png',
+      128: 'png_icons/icon128.png'
     }
   });
 }
@@ -69,12 +69,17 @@ async function applyGrayscaleToTab(tabId: number, isGrayscale: boolean): Promise
 // Function to apply grayscale to all tabs
 async function applyGrayscaleToAllTabs(isGrayscale: boolean): Promise<void> {
   try {
+    console.log(`Applying grayscale state ${isGrayscale} to all tabs`);
     const tabs = await chrome.tabs.query({});
+    console.log(`Found ${tabs.length} tabs to update`);
+    
     for (const tab of tabs) {
       if (tab.id) {
+        console.log(`Applying grayscale ${isGrayscale} to tab ${tab.id}: ${tab.title}`);
         await applyGrayscaleToTab(tab.id, isGrayscale);
       }
     }
+    console.log('Successfully applied grayscale to all tabs');
   } catch (error) {
     console.error('Error applying grayscale to all tabs:', error);
   }
@@ -106,15 +111,19 @@ async function toggleGrayscaleForTab(tabId: number): Promise<void> {
 
     // Toggle grayscale state
     const newState = !tabState.isGrayscale;
+    console.log(`Toggling tab ${tabId} to grayscale state: ${newState}`);
     
     // Get global settings
     const settingsResult = await chrome.storage.local.get('globalSettings');
     const globalSettings: GlobalSettings = settingsResult.globalSettings || { applyToAllTabs: false };
+    console.log('Global settings:', globalSettings);
     
     if (globalSettings.applyToAllTabs) {
+      console.log('Apply to all tabs is enabled, applying to all tabs');
       // Apply to all tabs if the global setting is enabled
       await applyGrayscaleToAllTabs(newState);
     } else {
+      console.log('Apply to all tabs is disabled, applying only to current tab');
       // Apply only to current tab
       await applyGrayscaleToTab(tabId, newState);
     }
@@ -146,6 +155,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'updateGlobalSetting') {
     (async () => {
       try {
+        console.log('Updating global setting:', message.applyToAllTabs);
+        
+        // Save the global setting first
+        await chrome.storage.local.set({
+          globalSettings: { applyToAllTabs: message.applyToAllTabs }
+        });
+        
         // Check if we should apply the current state to all tabs
         if (message.applyToAllTabs) {
           // Get the active tab's state to apply to all tabs
@@ -153,6 +169,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           if (tabs.length > 0 && tabs[0].id) {
             const result = await chrome.storage.local.get(`tab_${tabs[0].id}`);
             const activeTabState = result[`tab_${tabs[0].id}`] || { isGrayscale: false };
+            
+            console.log('Applying active tab state to all tabs:', activeTabState.isGrayscale);
             
             // Apply the active tab's state to all tabs
             await applyGrayscaleToAllTabs(activeTabState.isGrayscale);
