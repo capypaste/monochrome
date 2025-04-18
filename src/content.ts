@@ -17,17 +17,10 @@ function debounce<F extends (...args: any[]) => any>(func: F, waitFor: number): 
 function toggleGrayscale(enabled: boolean): void {
   console.log(`Content script applying grayscale: ${enabled}`);
   
-  // Apply or remove filter immediately to the root document
+  // Apply or remove filter using CSS class (primary method)
   if (enabled) {
     // Apply grayscale using a class for better performance
     document.documentElement.classList.add('monochrome-enabled');
-    
-    // Also use direct style for legacy support
-    document.documentElement.style.filter = 'grayscale(100%)';
-    document.documentElement.style.transition = 'filter 0.3s ease';
-    
-    // Also apply to all iframes in the document
-    applyToAllIframes(true);
     
     // Setup observer for SPAs and dynamically loaded content
     setupMutationObserver();
@@ -35,34 +28,12 @@ function toggleGrayscale(enabled: boolean): void {
     // Remove grayscale class
     document.documentElement.classList.remove('monochrome-enabled');
     
-    // Also remove direct style
-    document.documentElement.style.filter = 'none';
-    
-    // Also apply to all iframes in the document
-    applyToAllIframes(false);
-    
     // Clean up observer when not needed
     disconnectMutationObserver();
   }
 }
 
-// Helper function to apply grayscale to all existing iframes
-function applyToAllIframes(enabled: boolean): void {
-  const iframes = document.querySelectorAll('iframe');
-  console.log(`Applying grayscale to ${iframes.length} existing iframes`);
-  
-  iframes.forEach(iframe => {
-    try {
-      if (iframe.contentDocument) {
-        iframe.contentDocument.documentElement.style.filter = enabled ? 'grayscale(100%)' : 'none';
-        iframe.contentDocument.documentElement.style.transition = 'filter 0.3s ease';
-      }
-    } catch (e) {
-      // Cross-origin iframe - can't modify directly
-      console.debug('Could not apply grayscale to cross-origin iframe');
-    }
-  });
-}
+// Helper function is removed as CSS handles iframes directly via the monochrome-enabled class
 
 // Set up observer to handle dynamically added content
 function setupMutationObserver(): void {
@@ -190,57 +161,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true; // Keep the message channel open for async responses
 });
 
-// Apply grayscale immediately to prevent flash of unstyled content
-function injectInitialCSS(): void {
-  // First check if we need to be in grayscale mode
-  chrome.storage.local.get(null, (result) => {
-    // Try to get the current tab ID using the sender info from the background script
-    chrome.runtime.sendMessage({ action: 'getTabId' }, (response) => {
-      if (response && response.tabId) {
-        const tabState = result[`tab_${response.tabId}`];
-        if (tabState && tabState.isGrayscale) {
-          // Add the class to the HTML element immediately before any content renders
-          document.documentElement.classList.add('monochrome-enabled');
-          console.log('Added monochrome-enabled class at document_start');
-          
-          // Also use inline style as a fallback
-          document.documentElement.style.filter = 'grayscale(100%)';
-          document.documentElement.style.webkitFilter = 'grayscale(100%)'; 
-          document.documentElement.style.transition = 'filter 0.3s ease';
-          
-          // For very early rendering, also create a direct stylesheet
-          const style = document.createElement('style');
-          style.textContent = `
-            :root { 
-              filter: grayscale(100%) !important; 
-              -webkit-filter: grayscale(100%) !important;
-              transition: filter 0.3s ease !important;
-            }
-          `;
-          style.id = 'monochrome-grayscale-styles';
-          
-          // Insert at the earliest possible moment
-          (document.head || document.documentElement).appendChild(style);
-        }
-      }
-    });
+// Initialize the extension state - run this as early as possible
+// to prevent any flash of unstyled content
+(function() {
+  console.log('Content script starting initialization');
+  
+  // Add a temporary placeholder class immediately to prevent flashes
+  // This will be updated correctly once we determine the actual state
+  const style = document.createElement('style');
+  style.id = 'monochrome-temp-styles';
+  style.textContent = `
+    html.monochrome-enabled {
+      filter: grayscale(100%) !important;
+      -webkit-filter: grayscale(100%) !important;
+      transition: filter 0.3s ease !important;
+    }
+  `;
+  (document.head || document.documentElement).appendChild(style);
+  
+  // Initialize state as early as possible
+  initializeState();
+  
+  // Also catch the DOMContentLoaded event as a backup
+  document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOMContentLoaded event fired, ensuring grayscale is applied');
+    initializeState();
   });
-}
-
-// Run this immediately, don't wait for any events
-injectInitialCSS();
-
-// Initialize state as early as possible
-initializeState();
-
-// Also catch the DOMContentLoaded event as a backup
-document.addEventListener('DOMContentLoaded', () => {
-  console.log('DOMContentLoaded event fired, ensuring grayscale is applied');
-  initializeState();
-});
-
-// For pages that might already be loaded when the extension activates
-if (document.readyState === 'complete' || document.readyState === 'interactive') {
-  console.log('Page already loaded, initializing immediately');
-  initializeState();
-}
+})();

@@ -9,12 +9,6 @@ async function initializePopup() {
     const globalSettings = result.globalSettings || { applyToAllTabs: false };
     // Set checkbox state based on stored preference
     applyToAllTabsCheckbox.checked = globalSettings.applyToAllTabs;
-    // Get current tab state to update UI
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab && tab.id) {
-        const tabResult = await chrome.storage.local.get(`tab_${tab.id}`);
-        const tabState = tabResult[`tab_${tab.id}`];
-    }
 }
 // Handle checkbox change
 applyToAllTabsCheckbox.addEventListener('change', async () => {
