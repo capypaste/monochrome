@@ -73,6 +73,14 @@ interface ChromeAPI {
 // Declare the mock Tab ID in global scope
 declare global {
   var mockTabId: number;  // Using var instead of const for global declaration
+  
+  namespace NodeJS {
+    interface Global {
+      mockTabId: number;
+      chrome: ChromeAPI;
+      MutationObserver: any;
+    }
+  }
 }
 
 // Make this a module

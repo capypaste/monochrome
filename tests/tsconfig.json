@@ -1,0 +1,12 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "noImplicitAny": false,
+    "types": ["jest", "node", "chrome"]
+  },
+  "include": [
+    "../tests/**/*.ts",
+    "../jest.setup.js"
+  ]
+}

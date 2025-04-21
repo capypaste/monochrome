@@ -2,7 +2,7 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'jsdom',
-  setupFilesAfterEnv: ['./jest.setup.js'],
+  setupFilesAfterEnv: ['./tests/setup.ts'],
   testMatch: ['**/tests/**/*.test.ts'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
   testTimeout: 10000,
@@ -11,8 +11,8 @@ module.exports = {
     '^.+\\.tsx?$': [
       'ts-jest',
       {
-        // Use the project's tsconfig.json
-        tsconfig: 'tsconfig.json',
+        // Use the tests-specific tsconfig.json
+        tsconfig: 'tests/tsconfig.json',
       },
     ],
   },
