@@ -45,5 +45,5 @@ npx tsc
 popup.html
 manifest.json
 icons/ folder
-dst/ folder
+dist/ folder
 grayscale.css

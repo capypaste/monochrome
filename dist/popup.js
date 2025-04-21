@@ -6,11 +6,13 @@ const toggleCurrentTabButton = document.getElementById('toggleCurrentTab');
 async function initializePopup() {
     // Get global settings
     const result = await chrome.storage.local.get('globalSettings');
-    const globalSettings = result.globalSettings || { applyToAllTabs: false };
-    // Set checkbox state based on stored preference
+    const globalSettings = result.globalSettings || {
+        applyToAllTabs: false
+    };
+    // Set checkbox states based on stored preferences
     applyToAllTabsCheckbox.checked = globalSettings.applyToAllTabs;
 }
-// Handle checkbox change
+// Handle apply-to-all checkbox change
 applyToAllTabsCheckbox.addEventListener('change', async () => {
     // Save preference
     await chrome.storage.local.set({

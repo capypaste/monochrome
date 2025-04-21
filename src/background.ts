@@ -14,7 +14,7 @@ async function updateIcon(tabId: number | undefined, isGrayscale: boolean): Prom
   // Use badge text instead of icon swapping
   // This avoids the "Failed to fetch" error with icon loading
   try {
-    // Set badge text (G for Grayscale enabled, empty for disabled)
+    // Set badge text (ON for Grayscale enabled, empty for disabled)
     await chrome.action.setBadgeText({
       tabId: tabId,
       text: isGrayscale ? 'ON' : ''
@@ -126,7 +126,10 @@ async function toggleGrayscaleForTab(tabId: number): Promise<void> {
     
     // Get global settings
     const settingsResult = await chrome.storage.local.get('globalSettings');
-    const globalSettings: GlobalSettings = settingsResult.globalSettings || { applyToAllTabs: false };
+    const globalSettings: GlobalSettings = settingsResult.globalSettings || { 
+      applyToAllTabs: false
+    };
+    
     console.log('Global settings:', globalSettings);
     
     if (globalSettings.applyToAllTabs) {
@@ -168,7 +171,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       try {
         console.log('Updating global setting:', message.applyToAllTabs);
         
-        // Save the global setting first
+        // Save the global setting
         await chrome.storage.local.set({
           globalSettings: { applyToAllTabs: message.applyToAllTabs }
         });
