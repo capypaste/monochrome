@@ -40,3 +40,10 @@ To build the extension from source:
 npm install
 npx tsc
 ```
+
+## Files for Chrome Extension
+popup.html
+manifest.json
+icons/ folder
+dst/ folder
+grayscale.css
