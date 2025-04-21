@@ -1,7 +1,33 @@
+/**
+ * Monochrome Extension - Content Script
+ * 
+ * This script manages the application of grayscale filters to web pages.
+ * It handles:
+ * 1. Applying/removing grayscale filter via CSS classes
+ * 2. Dynamic content through mutation observers
+ * 3. Cross-frame grayscale application where possible
+ * 4. Communication with the background script
+ */
+
+//=============================================================================
+// STATE MANAGEMENT
+//=============================================================================
+
 // Track our observer instance for dynamic content
 let mutationObserver: MutationObserver | null = null;
 
-// Simple debounce function to improve performance
+//=============================================================================
+// UTILITY FUNCTIONS
+//=============================================================================
+
+/**
+ * Debounce function to limit how often a function is called
+ * Improves performance for frequently triggered events
+ * 
+ * @param func - The function to debounce
+ * @param waitFor - Milliseconds to wait before executing
+ * @returns Debounced function
+ */
 function debounce<F extends (...args: any[]) => any>(func: F, waitFor: number): (...args: Parameters<F>) => void {
   let timeout: ReturnType<typeof setTimeout> | null = null;
   
@@ -13,132 +39,13 @@ function debounce<F extends (...args: any[]) => any>(func: F, waitFor: number): 
   };
 }
 
-// Function to toggle grayscale filter
-function toggleGrayscale(enabled: boolean): void {
-  console.log(`Content script applying grayscale: ${enabled}`);
-  
-  // Apply or remove filter using CSS class (primary method)
-  if (enabled) {
-    // Apply grayscale using a class for better performance
-    document.documentElement.classList.add('monochrome-enabled');
-    
-    // Setup observer for SPAs and dynamically loaded content
-    setupMutationObserver();
-  } else {
-    // Remove grayscale class
-    document.documentElement.classList.remove('monochrome-enabled');
-    
-    // Clean up observer when not needed
-    disconnectMutationObserver();
-  }
-}
-
-// Helper function is removed as CSS handles iframes directly via the monochrome-enabled class
-
-// Set up observer to handle dynamically added content
-function setupMutationObserver(): void {
-  if (mutationObserver) return; // Already observing
-  
-  // Process iframes that might have been added
-  const processAddedIframes = (node: Node): void => {
-    // Look for added iframes
-    if (node instanceof HTMLIFrameElement) {
-      try {
-        // Try to access iframe content if same-origin
-        if (node.contentDocument) {
-          node.contentDocument.documentElement.style.filter = 'grayscale(100%)';
-          node.contentDocument.documentElement.style.transition = 'filter 0.3s ease';
-        }
-      } catch (e) {
-        // Cross-origin iframe - can't modify directly
-        console.debug('Could not apply grayscale to cross-origin iframe');
-      }
-    }
-  };
-
-  // Debounce the processing to improve performance on complex pages
-  const processAddedNodesDebounced = debounce((mutations: MutationRecord[]) => {
-    mutations.forEach((mutation) => {
-      if (mutation.type === 'childList') {
-        mutation.addedNodes.forEach(processAddedIframes);
-      }
-    });
-  }, 50); // 50ms debounce time
-
-  const observer = new MutationObserver((mutations) => {
-    processAddedNodesDebounced(mutations);
-  });
-
-  // Store the observer reference
-  mutationObserver = observer;
-
-  // Start observing the document with the configured parameters
-  // Make sure body exists before observing
-  if (document.body) {
-    observer.observe(document.body, { 
-      childList: true, 
-      subtree: true 
-    });
-  } else {
-    // If body isn't available yet, wait for it
-    const bodyObserver = new MutationObserver(() => {
-      if (document.body) {
-        observer.observe(document.body, { 
-          childList: true, 
-          subtree: true 
-        });
-        bodyObserver.disconnect();
-      }
-    });
-    
-    bodyObserver.observe(document.documentElement, { childList: true });
-  }
-}
-
-// Clean up observer when grayscale is disabled
-function disconnectMutationObserver(): void {
-  if (mutationObserver) {
-    mutationObserver.disconnect();
-    mutationObserver = null;
-  }
-}
-
-// Check if the page is already in grayscale mode when loaded
-async function initializeState(): Promise<void> {
-  try {
-    console.log('Content script initializing...');
-    
-    // Get tab ID without any delay
-    const tabId = await getCurrentTabId();
-    if (!tabId) {
-      console.warn('Could not get tab ID, retrying in 500ms');
-      setTimeout(initializeState, 500);
-      return;
-    }
-
-    console.log(`Got tab ID: ${tabId}, checking grayscale state`);
-    const result = await chrome.storage.local.get(`tab_${tabId}`);
-    const tabState = result[`tab_${tabId}`];
-    
-    if (tabState && tabState.isGrayscale) {
-      console.log('Tab should be grayscale, applying filter immediately');
-      toggleGrayscale(true);
-    } else {
-      console.log('Tab should be normal (not grayscale)');
-      // Ensure it's not grayscale
-      toggleGrayscale(false);
-    }
-  } catch (error) {
-    console.error('Error initializing grayscale state:', error);
-    // If getting the tab ID fails, try again after a short delay
-    setTimeout(initializeState, 500);
-  }
-}
-
-// Helper function to get current tab ID
+/**
+ * Get the tab ID for the current content script context
+ * (We can't access chrome.tabs API directly from content scripts)
+ * 
+ * @returns Promise resolving to the tab ID or undefined if unavailable
+ */
 async function getCurrentTabId(): Promise<number | undefined> {
-  // In content scripts, we can't directly access chrome.tabs API
-  // So we need to use the tab ID stored by the background script
   return new Promise<number | undefined>((resolve) => {
     chrome.runtime.sendMessage({ action: 'getTabId' }, (response) => {
       resolve(response?.tabId);
@@ -146,28 +53,203 @@ async function getCurrentTabId(): Promise<number | undefined> {
   });
 }
 
-// Listen for messages from the background script
+//=============================================================================
+// GRAYSCALE MANAGEMENT
+//=============================================================================
+
+/**
+ * Apply or remove grayscale filter to the entire page
+ * 
+ * @param enabled - Whether grayscale should be enabled
+ */
+function toggleGrayscale(enabled: boolean): void {
+  console.log(`Content script applying grayscale: ${enabled}`);
+  
+  if (enabled) {
+    // Apply grayscale using a class for better performance
+    document.documentElement.classList.add('monochrome-enabled');
+    
+    // Monitor for dynamic content that needs grayscale applied
+    setupMutationObserver();
+  } else {
+    // Remove grayscale class
+    document.documentElement.classList.remove('monochrome-enabled');
+    
+    // Stop monitoring for content changes when grayscale is disabled
+    disconnectMutationObserver();
+  }
+}
+
+//=============================================================================
+// IFRAME & DYNAMIC CONTENT HANDLING
+//=============================================================================
+
+/**
+ * Apply grayscale filter to an iframe if possible
+ * 
+ * @param iframe - The iframe element to process
+ */
+function applyGrayscaleToIframe(iframe: HTMLIFrameElement): void {
+  try {
+    // Access iframe content - this will throw an error for cross-origin frames
+    const doc = iframe.contentDocument;
+    if (!doc) return;
+    
+    // Apply grayscale filter directly to the iframe's document
+    doc.documentElement.style.filter = 'grayscale(100%)';
+    doc.documentElement.style.transition = 'filter 0.3s ease';
+  } catch (e) {
+    // This is normal for cross-origin iframes and not an error
+    console.debug('Could not apply grayscale to cross-origin iframe');
+  }
+}
+
+/**
+ * Process DOM mutations to find and handle newly added iframes
+ * 
+ * @param mutations - The list of mutations from MutationObserver
+ */
+function processMutations(mutations: MutationRecord[]): void {
+  mutations.forEach((mutation) => {
+    if (mutation.type !== 'childList') return;
+    
+    mutation.addedNodes.forEach((node) => {
+      // Apply grayscale to any newly added iframes
+      if (node instanceof HTMLIFrameElement) {
+        applyGrayscaleToIframe(node);
+      }
+    });
+  });
+}
+
+/**
+ * Set up observer to handle dynamically added content like iframes
+ * This is essential for Single Page Applications and dynamic websites
+ */
+function setupMutationObserver(): void {
+  // Don't create multiple observers
+  if (mutationObserver) return;
+  
+  // Create a debounced processor to improve performance
+  const processAddedNodesDebounced = debounce(processMutations, 50);
+  
+  // Create and store the observer
+  mutationObserver = new MutationObserver((mutations) => {
+    processAddedNodesDebounced(mutations);
+  });
+  
+  // Start observing if body is available
+  if (document.body) {
+    mutationObserver.observe(document.body, { 
+      childList: true, 
+      subtree: true 
+    });
+    return;
+  }
+  
+  // If body isn't available yet (rare), wait for it to be created
+  const bodyObserver = new MutationObserver(() => {
+    if (!document.body) return;
+    
+    // Once body exists, observe it and disconnect this temporary observer
+    mutationObserver?.observe(document.body, { 
+      childList: true, 
+      subtree: true 
+    });
+    bodyObserver.disconnect();
+  });
+  
+  // Watch for body to be added to document
+  bodyObserver.observe(document.documentElement, { childList: true });
+}
+
+/**
+ * Clean up the mutation observer when grayscale is disabled
+ */
+function disconnectMutationObserver(): void {
+  if (!mutationObserver) return;
+  
+  mutationObserver.disconnect();
+  mutationObserver = null;
+}
+
+//=============================================================================
+// STATE INITIALIZATION
+//=============================================================================
+
+/**
+ * Initialize the grayscale state based on stored settings
+ * Retries automatically if tab ID can't be retrieved
+ */
+async function initializeState(): Promise<void> {
+  try {
+    console.log('Content script initializing...');
+    
+    // Get tab ID from background script
+    const tabId = await getCurrentTabId();
+    if (!tabId) {
+      console.warn('Could not get tab ID, retrying in 500ms');
+      setTimeout(initializeState, 500);
+      return;
+    }
+
+    // Retrieve grayscale state for this tab
+    console.log(`Got tab ID: ${tabId}, checking grayscale state`);
+    const result = await chrome.storage.local.get(`tab_${tabId}`);
+    const tabState = result[`tab_${tabId}`];
+    
+    // Apply the stored state
+    const isGrayscale = tabState?.isGrayscale ?? false;
+    console.log(`Tab should be ${isGrayscale ? 'grayscale' : 'normal'}`);
+    toggleGrayscale(isGrayscale);
+  } catch (error) {
+    console.error('Error initializing grayscale state:', error);
+    // Retry after a delay if there was an error
+    setTimeout(initializeState, 500);
+  }
+}
+
+//=============================================================================
+// MESSAGE HANDLING
+//=============================================================================
+
+/**
+ * Listen for messages from the background script
+ * Handles commands like toggling grayscale state
+ */
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'toggleGrayscale') {
     console.log(`Received toggle message with grayscale: ${message.isGrayscale}`);
+    
     // Apply grayscale immediately
     toggleGrayscale(message.isGrayscale);
-    // Make sure the UI reflects the change right away
+    
+    // Ensure the UI updates immediately with requestAnimationFrame
+    // This prevents any visual delay in applying the filter
     requestAnimationFrame(() => {
       document.documentElement.style.filter = message.isGrayscale ? 'grayscale(100%)' : 'none';
     });
+    
     sendResponse({ success: true });
   }
-  return true; // Keep the message channel open for async responses
+  
+  // Keep the message channel open for async responses
+  return true;
 });
 
-// Initialize the extension state - run this as early as possible
-// to prevent any flash of unstyled content
+//=============================================================================
+// INITIALIZATION
+//=============================================================================
+
+/**
+ * Self-executing initialization function
+ * Runs as soon as the content script is injected
+ */
 (function() {
   console.log('Content script starting initialization');
   
-  // Add a temporary placeholder class immediately to prevent flashes
-  // This will be updated correctly once we determine the actual state
+  // Add stylesheet immediately to prevent flash of unstyled content
+  // This defines the monochrome-enabled class used for grayscale
   const style = document.createElement('style');
   style.id = 'monochrome-temp-styles';
   style.textContent = `
@@ -179,10 +261,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   `;
   (document.head || document.documentElement).appendChild(style);
   
-  // Initialize state as early as possible
+  // Initialize state immediately
   initializeState();
   
-  // Also catch the DOMContentLoaded event as a backup
+  // Also initialize on DOMContentLoaded as a fallback
+  // This ensures grayscale is applied even if the script loads late
   document.addEventListener('DOMContentLoaded', () => {
     console.log('DOMContentLoaded event fired, ensuring grayscale is applied');
     initializeState();
