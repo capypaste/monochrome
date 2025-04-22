@@ -154,7 +154,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 await chrome.storage.local.set({
                     globalSettings: { applyToAllTabs: message.applyToAllTabs }
                 });
-                // Check if we should apply the current state to all tabs
+                // Only update tabs when turning ON global mode
+                // When turning OFF global mode, we preserve individual tab states
                 if (message.applyToAllTabs) {
                     // Get the active tab's state to apply to all tabs
                     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -165,6 +166,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                         // Apply the active tab's state to all tabs
                         await applyGrayscaleToAllTabs(activeTabState.isGrayscale);
                     }
+                }
+                else {
+                    console.log('Global mode turned OFF - individual tab states are preserved');
                 }
                 sendResponse({ success: true });
             }
