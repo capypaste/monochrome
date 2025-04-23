@@ -42,8 +42,8 @@ npx tsc
 ```
 
 ## Files for Chrome Extension
-popup.html
-manifest.json
-icons/ folder
-dist/ folder
-grayscale.css
+- popup.html
+- manifest.json
+- icons/ folder
+- .dist/ folder
+- grayscale.css
