@@ -1,14 +1,15 @@
 {
   "compilerOptions": {
-    "target": "es2017",
+    "target": "es2020",
     "module": "es2020",
     "strict": true,
     "esModuleInterop": true,
-    "outDir": "dist",
+    "outDir": ".dist",
     "rootDir": "src",
-    "lib": ["dom", "es2017"],
-    "moduleResolution": "node"
+    "lib": ["dom", "es2020"],
+    "moduleResolution": "node",
+    "typeRoots": ["./types", "./node_modules/@types"]
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["src/**/*", "test/**/*", "types/**/*"],
+  "exclude": ["node_modules", ".dist"]
 }
