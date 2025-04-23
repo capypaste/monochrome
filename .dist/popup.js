@@ -67,8 +67,7 @@ toggleCurrentTabButton.addEventListener('click', async () => {
 chrome.runtime.onMessage.addListener((message) => {
     if (message.action === 'tabStateChanged' && message.tabId) {
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-            var _a;
-            if (((_a = tabs[0]) === null || _a === void 0 ? void 0 : _a.id) === message.tabId) {
+            if (tabs[0]?.id === message.tabId) {
                 updateStatusIndicator(message.isGrayscale);
             }
         });
