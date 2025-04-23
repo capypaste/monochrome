@@ -298,6 +298,32 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   }
 });
 
+// Apply global grayscale state to new tabs
+chrome.tabs.onCreated.addListener(async (tab) => {
+  if (!tab.id) return;
+  try {
+    const settingsResult = await chrome.storage.local.get('globalSettings');
+    const globalSettings: GlobalSettings = settingsResult.globalSettings || { 
+      applyToAllTabs: false,
+      globalGrayscaleState: false
+    };
+
+    if (globalSettings.applyToAllTabs) {
+      console.log(`New tab ${tab.id} created, applying global grayscale state: ${globalSettings.globalGrayscaleState}`);
+      // Wait briefly to ensure tab is ready
+      setTimeout(async () => {
+        try {
+          await applyGrayscaleToTab(tab.id, globalSettings.globalGrayscaleState || false);
+        } catch (error) {
+          console.warn(`Could not apply grayscale to new tab ${tab.id}:`, error);
+        }
+      }, 100);
+    }
+  } catch (error) {
+    console.error('Error handling new tab creation:', error);
+  }
+});
+
 // Clean up tab state when a tab is closed
 chrome.tabs.onRemoved.addListener((tabId) => {
   chrome.storage.local.remove(`tab_${tabId}`);
