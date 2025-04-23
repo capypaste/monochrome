@@ -4,12 +4,12 @@
     "module": "es2020",
     "strict": true,
     "esModuleInterop": true,
-    "outDir": ".dist",
+    "outDir": "dist",
     "rootDir": "src",
     "lib": ["dom", "es2020"],
     "moduleResolution": "node",
     "typeRoots": ["./types", "./node_modules/@types"]
   },
   "include": ["src/**/*", "test/**/*", "types/**/*"],
-  "exclude": ["node_modules", ".dist"]
+  "exclude": ["node_modules", "dist"]
 }
