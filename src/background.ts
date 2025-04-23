@@ -32,38 +32,49 @@ async function updateIcon(tabId: number | undefined, isGrayscale: boolean): Prom
   }
 }
 
-// Function to apply grayscale to a specific tab
-async function applyGrayscaleToTab(tabId: number, isGrayscale: boolean): Promise<void> {
+// Function to apply grayscale to a specific tab with retries
+async function applyGrayscaleToTab(tabId: number, isGrayscale: boolean, retries: number = 3, delay: number = 200): Promise<void> {
   if (!tabId) return;
 
-  try {
-    await chrome.storage.local.set({ [`tab_${tabId}`]: { isGrayscale } });
-    await updateIcon(tabId, isGrayscale);
-
+  for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      await chrome.tabs.sendMessage(tabId, { 
-        action: 'toggleGrayscale', 
-        isGrayscale: isGrayscale 
-      });
-    } catch (err) {
-      console.warn("Could not send message to content script:", err);
+      console.log(`Applying grayscale to tab ${tabId}, attempt ${attempt}: isGrayscale=${isGrayscale}`);
+      await chrome.storage.local.set({ [`tab_${tabId}`]: { isGrayscale } });
+      await updateIcon(tabId, isGrayscale);
 
       try {
-        await chrome.scripting.executeScript({
-          target: { tabId: tabId },
-          func: (enabled: boolean) => {
-            document.documentElement.style.filter = enabled ? 'grayscale(100%)' : 'none';
-            document.documentElement.style.transition = 'filter 0.3s ease';
-          },
-          args: [isGrayscale]
+        await chrome.tabs.sendMessage(tabId, { 
+          action: 'toggleGrayscale', 
+          isGrayscale: isGrayscale 
         });
-      } catch (scriptErr) {
-        console.warn("Could not execute script:", scriptErr);
+        return; // Success, exit retry loop
+      } catch (err) {
+        console.warn(`Could not send message to content script for tab ${tabId}:`, err);
+
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId: tabId },
+            func: (enabled: boolean) => {
+              document.documentElement.style.filter = enabled ? 'grayscale(100%)' : 'none';
+              document.documentElement.style.transition = 'filter 0.3s ease';
+            },
+            args: [isGrayscale]
+          });
+          return; // Success, exit retry loop
+        } catch (scriptErr) {
+          console.warn(`Could not execute script for tab ${tabId}:`, scriptErr);
+        }
       }
+    } catch (error) {
+      console.error(`Error applying grayscale to tab ${tabId}, attempt ${attempt}:`, error);
     }
-  } catch (error) {
-    console.error('Error applying grayscale to tab:', error);
+
+    if (attempt < retries) {
+      console.log(`Retrying grayscale application for tab ${tabId} in ${delay}ms`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
   }
+  console.warn(`Failed to apply grayscale to tab ${tabId} after ${retries} attempts`);
 }
 
 // Function to apply grayscale to all tabs
@@ -215,9 +226,9 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
   }
 });
 
-// Update icon when navigating to a new page
+// Update icon and state when navigating to a new page
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  if (changeInfo.status === 'complete') {
+  if (changeInfo.status === 'complete' && tab.id) {
     try {
       const settingsResult = await chrome.storage.local.get('globalSettings');
       const globalSettings: GlobalSettings = settingsResult.globalSettings || { 
@@ -226,6 +237,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
       };
 
       if (globalSettings.applyToAllTabs) {
+        console.log(`Tab ${tabId} updated, applying global grayscale state: ${globalSettings.globalGrayscaleState}`);
         await applyGrayscaleToTab(tabId, globalSettings.globalGrayscaleState || false);
       } else {
         const result = await chrome.storage.local.get(`tab_${tabId}`);
@@ -233,7 +245,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
         await updateIcon(tabId, tabState?.isGrayscale || false);
       }
     } catch (error) {
-      console.error('Error updating icon on page load:', error);
+      console.error('Error updating tab on page load:', error);
     }
   }
 });
@@ -250,15 +262,8 @@ chrome.tabs.onCreated.addListener(async (tab) => {
 
     if (globalSettings.applyToAllTabs) {
       console.log(`New tab ${tab.id} created, applying global grayscale state: ${globalSettings.globalGrayscaleState}`);
-      // Wait briefly to ensure tab is ready
-      const tabId = tab.id; // Necesary to check for undefined
-      setTimeout(async () => {
-        try {
-          await applyGrayscaleToTab(tabId, globalSettings.globalGrayscaleState || false);
-        } catch (error) {
-          console.warn(`Could not apply grayscale to new tab ${tab.id}:`, error);
-        }
-      }, 100);
+      // Apply with retries to ensure tab is ready
+      await applyGrayscaleToTab(tab.id, globalSettings.globalGrayscaleState || false, 3, 200);
     }
   } catch (error) {
     console.error('Error handling new tab creation:', error);
